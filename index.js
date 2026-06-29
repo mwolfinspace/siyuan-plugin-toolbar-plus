@@ -215,7 +215,6 @@ module.exports = class ToolbarPlusPlugin extends Plugin {
         button.classList.remove("b3-tooltips__ne");
         button.classList.add("b3-tooltips__se");
       }
-      this.createDivide(toolbar);
       this.createIndentButton(toolbar);
       this.createOutdentButton(toolbar);
       this.createColumnsUpButton(toolbar);
@@ -224,14 +223,12 @@ module.exports = class ToolbarPlusPlugin extends Plugin {
       this.createRedoButton(toolbar);
       this.createDivide2(toolbar);
       this.createAlignButtons(toolbar);
+      this.createDivide3(toolbar);
+      this.createMoveUpButton(toolbar);
+      this.createMoveDownButton(toolbar);
+      this.createDivide4(toolbar);
+      this.createTableButton(toolbar);
     }
-  }
-
-  createDivide(toolbar) {
-    if (toolbar.querySelector('div#divide-1')) {
-      return;
-    }
-    toolbar.querySelector('button[data-type="block-ref"]').insertAdjacentHTML('beforeBegin', '<div id="divide-1" class="protyle-toolbar__divider b3-tooltips__se"></div>')
   }
 
   createUndoButton(toolbar) {
@@ -254,7 +251,8 @@ module.exports = class ToolbarPlusPlugin extends Plugin {
     button.addEventListener("click", () => {
       protyle.undo.undo(protyle);
     });
-    toolbar.querySelector('#divide-1').insertAdjacentElement('beforeBegin', button);
+    const ref = toolbar.querySelector('button[data-type="block-ref"]');
+    if (ref) { ref.parentNode.insertBefore(button, ref); }
   }
 
   createRedoButton(toolbar) {
@@ -278,7 +276,8 @@ module.exports = class ToolbarPlusPlugin extends Plugin {
       protyle.undo.redo(protyle);
     });
     toolbar.appendChild(button);
-    toolbar.querySelector('#divide-1').insertAdjacentElement('beforeBegin', button);
+    const ref = toolbar.querySelector('button[data-type="block-ref"]');
+    if (ref) { ref.parentNode.insertBefore(button, ref); }
   }
 
   createIndentButton(toolbar) {
@@ -456,6 +455,337 @@ module.exports = class ToolbarPlusPlugin extends Plugin {
       el = p;
     }
     return null;
+  }
+
+
+
+  createDivide3(toolbar) {
+    if (toolbar.querySelector('div#divide-3')) return;
+    const ref = toolbar.querySelector('#align-justify') || toolbar.querySelector('#align-center') || toolbar.querySelector('#redo');
+    ref.insertAdjacentHTML('afterEnd', '<div id="divide-3" class="protyle-toolbar__divider b3-tooltips__se"></div>')
+  }
+
+  createDivide4(toolbar) {
+    if (toolbar.querySelector('div#divide-4')) return;
+    const ref = toolbar.querySelector('#move-down') || toolbar.querySelector('#move-up');
+    if (ref) {
+      ref.insertAdjacentHTML('afterEnd', '<div id="divide-4" class="protyle-toolbar__divider b3-tooltips__se"></div>')
+    }
+  }
+
+  createMoveUpButton(toolbar) {
+    if (toolbar.querySelector("#move-up")) return;
+    const button = document.createElement("button");
+    button.classList.add("protyle-toolbar__item", "b3-tooltips", "b3-tooltips__se");
+    button.setAttribute("aria-label", this.i18n.moveUp);
+    button.innerHTML = '<svg><use xlink:href="#iconUp"></use></svg>';
+    button.id = "move-up";
+    button.addEventListener("click", async () => {
+      const protyle = this.protyles.get(toolbar);
+      if (!protyle) return;
+      const moveEl = this.getMoveBlockElement(protyle);
+      if (!moveEl) return;
+      await this.performMove(toolbar, moveEl, 'up');
+    });
+    const ref = toolbar.querySelector('#divide-3');
+    if (ref) {
+      ref.parentNode.insertBefore(button, ref.nextSibling);
+    }
+  }
+
+  createMoveDownButton(toolbar) {
+    if (toolbar.querySelector("#move-down")) return;
+    const button = document.createElement("button");
+    button.classList.add("protyle-toolbar__item", "b3-tooltips", "b3-tooltips__se");
+    button.setAttribute("aria-label", this.i18n.moveDown);
+    button.innerHTML = '<svg><use xlink:href="#iconDown"></use></svg>';
+    button.id = "move-down";
+    button.addEventListener("click", async () => {
+      const protyle = this.protyles.get(toolbar);
+      if (!protyle) return;
+      const moveEl = this.getMoveBlockElement(protyle);
+      if (!moveEl) return;
+      await this.performMove(toolbar, moveEl, 'down');
+    });
+    const ref = toolbar.querySelector('#move-up');
+    if (ref) {
+      ref.parentNode.insertBefore(button, ref.nextSibling);
+    }
+  }
+
+  getMoveBlockElement(protyle) {
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return null;
+    const range = selection.getRangeAt(0);
+    let el = range.commonAncestorContainer;
+    while (el && el.parentElement) {
+      if (el.nodeType === 1 && el.hasAttribute('data-node-id')) {
+        const parent = el.parentElement;
+        if (parent.classList.contains('protyle-wysiwyg') || parent.classList.contains('list')) {
+          return el;
+        }
+      }
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  async performMove(toolbar, moveEl, direction) {
+    const protyle = this.protyles.get(toolbar);
+    if (!protyle) return;
+    const parent = moveEl.parentElement;
+    const moveId = moveEl.getAttribute('data-node-id');
+    const parentId = parent.getAttribute('data-node-id') || protyle.block.parentID;
+
+    if (direction === 'up') {
+      let sibling = moveEl.previousElementSibling;
+      while (sibling && this.isNonBlockElement(sibling)) {
+        sibling = sibling.previousElementSibling;
+      }
+      if (!sibling) return;
+
+      const siblingId = sibling.getAttribute('data-node-id');
+      let prevOfSibling = sibling.previousElementSibling;
+      while (prevOfSibling && this.isNonBlockElement(prevOfSibling)) {
+        prevOfSibling = prevOfSibling.previousElementSibling;
+      }
+      const prevOfSiblingId = prevOfSibling ? prevOfSibling.getAttribute('data-node-id') : null;
+
+      parent.insertBefore(moveEl, sibling);
+
+      const doOperations = [{ action: "move", id: moveId, previousID: prevOfSiblingId, parentID: parentId }];
+      const undoOperations = [{ action: "move", id: moveId, previousID: siblingId, parentID: parentId }];
+      await this.sendTransaction(doOperations, undoOperations);
+    } else {
+      let sibling = moveEl.nextElementSibling;
+      while (sibling && this.isNonBlockElement(sibling)) {
+        sibling = sibling.nextElementSibling;
+      }
+      if (!sibling) return;
+
+      let prevOfMove = moveEl.previousElementSibling;
+      while (prevOfMove && this.isNonBlockElement(prevOfMove)) {
+        prevOfMove = prevOfMove.previousElementSibling;
+      }
+      const prevOfMoveId = prevOfMove ? prevOfMove.getAttribute('data-node-id') : null;
+      const siblingId = sibling.getAttribute('data-node-id');
+
+      parent.insertBefore(sibling, moveEl);
+
+      const doOperations = [{ action: "move", id: siblingId, previousID: prevOfMoveId, parentID: parentId }];
+      const undoOperations = [{ action: "move", id: siblingId, previousID: moveId, parentID: parentId }];
+      await this.sendTransaction(doOperations, undoOperations);
+    }
+
+    this.focusBlock(protyle, moveId);
+  }
+
+  isNonBlockElement(el) {
+    return el.classList.contains('protyle-attr') || el.classList.contains('protyle-action') || el.classList.contains('protyle-icon');
+  }
+
+  async sendTransaction(doOperations, undoOperations) {
+    const appId = window.siyuan.config.system.appId;
+    await fetch("/api/transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session: appId, app: appId,
+        transactions: [{ doOperations, undoOperations }]
+      })
+    });
+  }
+
+  focusBlock(protyle, blockId) {
+    try {
+      const el = protyle.wysiwyg.element.querySelector(`[data-node-id="${blockId}"]`);
+      if (el) {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    } catch (e) {}
+  }
+
+  createTableButton(toolbar) {
+    if (toolbar.querySelector("#insert-table")) return;
+    const button = document.createElement("button");
+    button.classList.add("protyle-toolbar__item", "b3-tooltips", "b3-tooltips__se");
+    button.setAttribute("aria-label", this.i18n.insertTable);
+    button.innerHTML = '<svg><use xlink:href="#iconTable"></use></svg>';
+    button.id = "insert-table";
+    button.addEventListener("click", () => this.showTablePopup(toolbar, button));
+    const ref = toolbar.querySelector('#move-down');
+    if (ref) {
+      ref.parentNode.insertBefore(button, ref.nextSibling);
+    }
+  }
+
+  showTablePopup(toolbar, button) {
+    const existing = document.getElementById("table-popup");
+    if (existing) { existing.remove(); return }
+
+    const popup = document.createElement("div");
+    popup.id = "table-popup";
+    popup.style.cssText = 'position:fixed;z-index:9999;padding:8px;background:var(--b3-menu-background);border:1px solid var(--b3-border-color);border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.15);min-width:180px';
+
+    const maxGrid = 10;
+    const gridLabel = document.createElement("div");
+    gridLabel.style.cssText = 'text-align:center;font-size:12px;margin-bottom:6px;color:var(--b3-theme-on-background)';
+    gridLabel.textContent = '3 × 3';
+    popup.appendChild(gridLabel);
+
+    const grid = document.createElement("div");
+    grid.style.cssText = `display:grid;grid-template-columns:repeat(${maxGrid},18px);gap:1px;margin-bottom:6px`;
+    grid.id = "table-grid";
+    const cells = [];
+    for (let r = 0; r < maxGrid; r++) {
+      for (let c = 0; c < maxGrid; c++) {
+        const cell = document.createElement("div");
+        cell.dataset.r = r;
+        cell.dataset.c = c;
+        cell.style.cssText = 'width:18px;height:18px;background:var(--b3-theme-background);border:1px solid var(--b3-border-color);cursor:pointer';
+        grid.appendChild(cell);
+        cells.push(cell);
+      }
+    }
+    popup.appendChild(grid);
+
+    const inputArea = document.createElement("div");
+    inputArea.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:6px';
+    inputArea.innerHTML = `
+      <input id="table-rows" type="number" min="1" max="100" value="3" style="width:50px;padding:2px 4px;border:1px solid var(--b3-border-color);border-radius:2px;background:var(--b3-theme-background);color:var(--b3-theme-on-background);font-size:12px">
+      <span style="font-size:12px;color:var(--b3-theme-on-background)">×</span>
+      <input id="table-cols" type="number" min="1" max="100" value="3" style="width:50px;padding:2px 4px;border:1px solid var(--b3-border-color);border-radius:2px;background:var(--b3-theme-background);color:var(--b3-theme-on-background);font-size:12px">
+    `;
+    popup.appendChild(inputArea);
+
+    const btnRow = document.createElement("div");
+    btnRow.style.cssText = 'display:flex;gap:4px';
+    const insertBtn = document.createElement("button");
+    insertBtn.className = 'b3-button b3-button--outline';
+    insertBtn.style.cssText = 'flex:1;font-size:12px;padding:4px';
+    insertBtn.textContent = this.i18n.insert || 'Insert';
+    btnRow.appendChild(insertBtn);
+    popup.appendChild(btnRow);
+
+    let selectedR = 0, selectedC = 0;
+
+    const highlight = (r, c) => {
+      selectedR = Math.min(r + 1, maxGrid);
+      selectedC = Math.min(c + 1, maxGrid);
+      cells.forEach(cell => {
+        const cr = parseInt(cell.dataset.r), cc = parseInt(cell.dataset.c);
+        cell.style.background = (cr < selectedR && cc < selectedC) ? 'var(--b3-theme-primary)' : 'var(--b3-theme-background)';
+      });
+      gridLabel.textContent = `${selectedR} × ${selectedC}`;
+    };
+
+    const updateInputs = () => {
+      const rv = parseInt(inputArea.querySelector('#table-rows').value) || 1;
+      const cv = parseInt(inputArea.querySelector('#table-cols').value) || 1;
+      gridLabel.textContent = `${rv} × ${cv}`;
+      selectedR = rv;
+      selectedC = cv;
+      cells.forEach(cell => {
+        const cr = parseInt(cell.dataset.r), cc = parseInt(cell.dataset.c);
+        cell.style.background = (cr < Math.min(rv, maxGrid) && cc < Math.min(cv, maxGrid)) ? 'var(--b3-theme-primary)' : 'var(--b3-theme-background)';
+      });
+    };
+
+    grid.addEventListener('mouseover', (e) => {
+      const cell = e.target.closest('div');
+      if (!cell || !cell.dataset.r) return;
+      highlight(parseInt(cell.dataset.r), parseInt(cell.dataset.c));
+      inputArea.querySelector('#table-rows').value = selectedR;
+      inputArea.querySelector('#table-cols').value = selectedC;
+    });
+
+    grid.addEventListener('click', (e) => {
+      const cell = e.target.closest('div');
+      if (!cell || !cell.dataset.r) return;
+      highlight(parseInt(cell.dataset.r), parseInt(cell.dataset.c));
+      inputArea.querySelector('#table-rows').value = selectedR;
+      inputArea.querySelector('#table-cols').value = selectedC;
+      insertBtn.click();
+    });
+
+    inputArea.querySelector('#table-rows').addEventListener('input', updateInputs);
+    inputArea.querySelector('#table-cols').addEventListener('input', updateInputs);
+
+    insertBtn.addEventListener('click', async () => {
+      const rows = Math.max(1, parseInt(inputArea.querySelector('#table-rows').value) || 1);
+      const cols = Math.max(1, parseInt(inputArea.querySelector('#table-cols').value) || 1);
+      await this.insertTable(toolbar, rows, cols);
+      popup.remove();
+    });
+
+    document.body.appendChild(popup);
+    const rect = button.getBoundingClientRect();
+    const popupRect = popup.getBoundingClientRect();
+    popup.style.top = (rect.bottom + 4) + 'px';
+    popup.style.left = Math.min(rect.left, window.innerWidth - popupRect.width - 8) + 'px';
+
+    setTimeout(() => {
+      const handler = (e) => {
+        if (!popup.contains(e.target) && e.target !== button) {
+          popup.remove();
+          document.removeEventListener('click', handler);
+        }
+      };
+      document.addEventListener('click', handler);
+    }, 0);
+  }
+
+  async insertTable(toolbar, rows, cols) {
+    const protyle = this.protyles.get(toolbar);
+    if (!protyle) return;
+
+    let mdTable = `| ${Lute.Caret || ' '}`;
+    for (let c = 1; c < cols; c++) mdTable += ' | ';
+    mdTable += ' |\n|';
+    for (let c = 0; c < cols; c++) mdTable += ' --- |';
+    for (let r = 0; r < rows - 1; r++) {
+      mdTable += '\n|';
+      for (let c = 0; c < cols; c++) mdTable += '  |';
+    }
+
+    try {
+      if (protyle.hint && typeof protyle.hint.fill === 'function') {
+        protyle.hint.splitChar = '/';
+        protyle.hint.lastIndex = -1;
+        protyle.hint.fill(mdTable, protyle, false);
+      } else {
+        await this.insertTableViaAPI(protyle, mdTable);
+      }
+    } catch (e) {
+      await this.insertTableViaAPI(protyle, mdTable);
+    }
+  }
+
+  async insertTableViaAPI(protyle, mdTable) {
+    const blockEl = this.getCursorBlockElement(protyle);
+    if (!blockEl) return;
+    const blockId = blockEl.getAttribute('data-node-id');
+    const parent = blockEl.parentElement;
+    const parentId = parent.getAttribute('data-node-id') || protyle.block.parentID;
+
+    const res = await fetch('/api/block/insertBlock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dataType: 'markdown',
+        data: mdTable,
+        parentID: parentId,
+        previousID: blockId
+      })
+    }).then(r => r.json());
+    if (res.code !== 0) {
+      console.warn('insertBlock failed, trying hint.fill');
+    }
   }
 
   onunload() {
