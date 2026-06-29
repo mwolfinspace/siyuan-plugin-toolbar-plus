@@ -1,0 +1,14 @@
+{
+    "toggleShowToolbarOnTop": "Toggle show toolbar on top",
+    "title": "Toolbar Plus",
+    "undo": "Undo",
+    "redo": "Redo",
+    "indent": "Indent",
+    "outdent": "Outdent",
+    "columnsUp": "Add column",
+    "columnsDown": "Remove column",
+    "alignLeft": "Align left",
+    "alignCenter": "Align center",
+    "alignRight": "Align right",
+    "alignJustify": "Justify"
+}
