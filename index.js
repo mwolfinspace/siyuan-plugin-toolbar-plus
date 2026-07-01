@@ -154,6 +154,33 @@ module.exports = class ToolbarPlusPlugin extends Plugin {
         this.injectButton();
       }
     })
+
+    document.addEventListener('paste', e => {
+      const target = e.target;
+      if (target.tagName !== 'PROTYLE-HTML' && target.localName !== 'input') return;
+      e.stopPropagation();
+      e.preventDefault();
+      const protyleEl = target.closest('.protyle') || document.querySelector('.protyle:not(.fn__none)');
+      if (!protyleEl) return;
+      const wysiwyg = protyleEl.querySelector('[contenteditable="true"]');
+      if (!wysiwyg) return;
+      const dt = new DataTransfer();
+      for (const f of e.clipboardData.files) {
+        if (f.size > 0) dt.items.add(f);
+      }
+      for (const item of e.clipboardData.items) {
+        if (item.kind === 'file') {
+          const file = item.getAsFile();
+          if (file && file.size > 0) dt.items.add(file);
+        }
+      }
+      const html = e.clipboardData.getData('text/html');
+      const text = e.clipboardData.getData('text/plain');
+      if (text) dt.setData('text/plain', text);
+      if (html) dt.setData('text/html', html);
+      wysiwyg.focus();
+      wysiwyg.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    }, true);
   }
 
   toggleShowToolbarOnTop() {
